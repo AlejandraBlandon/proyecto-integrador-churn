@@ -19,12 +19,12 @@ echo Buscando código del proyecto en config.json...
 setlocal EnableDelayedExpansion
 
 REM Cambiar al directorio donde está config.json
-if not exist "src\config.json" (
+if not exist "mlops_pipeline\src\config.json"  (
     echo Error: No se encontró "config.json" en el directorio "src". Asegúrate de que la ruta es correcta.
     goto :eof
 )
 
-cd src
+cd mlops_pipeline\src
 
 for /f "usebackq tokens=2 delims=:" %%A in (`findstr "project_code" config.json`) do (
     set "line=%%A"
@@ -37,7 +37,7 @@ for /f "usebackq tokens=2 delims=:" %%A in (`findstr "project_code" config.json`
 echo Project code encontrado: [%project_code%]
 
 REM Volver al directorio raíz
-cd ..
+cd ..\..
 
 echo Creando nuevo ambiente virtual: %project_code%-venv
 py -m venv %project_code%-venv
