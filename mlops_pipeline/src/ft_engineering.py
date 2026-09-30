@@ -147,3 +147,4 @@ X_test_transformado = preprocesador.transform(X_test)
 
 print("Forma de X_train transformado:", X_train_transformado.shape)
 print("Forma de X_test transformado:", X_test_transformado.shape)
+# %%
