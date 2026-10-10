@@ -183,7 +183,7 @@ tabla_drift_num = (pd.DataFrame(resultados_numericos)
                    .set_index("variable")
                    .sort_values("psi", ascending=False)
                    .round(4))
-tabla_drift_num
+
 # %%
 
 
@@ -405,3 +405,116 @@ for v in ventanas:
 
 
 # %%
+# %% Aplicación Streamlit
+# Se activa solo si el archivo se abre con: streamlit run mlops_pipeline/src/model_monitoring.py
+# Si se ejecuta con "python" o por celdas, este bloque no hace nada.
+try:
+    from streamlit.runtime import exists as _streamlit_activo
+    EN_STREAMLIT = _streamlit_activo()
+except Exception:
+    EN_STREAMLIT = False
+
+if EN_STREAMLIT:
+    import streamlit as st
+
+    ICONOS = {"Estable": "🟢", "Atención": "🟡", "Crítico": "🔴", "Muestra insuficiente": "⚪"}
+
+    st.set_page_config(page_title="Monitoreo de data drift", layout="wide")
+    st.title("Monitoreo de data drift del modelo de pago a tiempo")
+    st.caption("Simulación: referencia = préstamos hasta mayo 2025; "
+               "actual = préstamos desde junio 2025, por ventana mensual.")
+
+    # --- Selector de ventana ---
+    ventana_sel = st.sidebar.selectbox("Ventana de monitoreo", ventanas, index=len(ventanas) - 1)
+    sub_app = tabla_drift_ventanas[tabla_drift_ventanas["ventana"] == ventana_sel].copy()
+    datos_ventana = df_actual[df_actual["ventana"] == ventana_sel]
+
+    # --- Indicadores generales ---
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Filas en la ventana", len(datos_ventana))
+    c2.metric("% nulos en puntaje", f"{datos_ventana['puntaje'].isnull().mean() * 100:.1f}%",
+              f"{datos_ventana['puntaje'].isnull().mean() * 100 - df_referencia['puntaje'].isnull().mean() * 100:+.1f} pp vs referencia",
+              delta_color="inverse")
+    c3.metric("Prob. media de pago (modelo)", f"{datos_ventana['prob_pago'].mean():.3f}")
+    c4.metric("% que pagó a tiempo (real)", f"{datos_ventana['Pago_atiempo'].mean() * 100:.1f}%")
+
+    # --- Barra de riesgo: proporción de variables en estado crítico ---
+    evaluadas = sub_app[sub_app["estado"] != "Muestra insuficiente"]
+    n_criticas = int((evaluadas["estado"] == "Crítico").sum())
+    n_atencion = int((evaluadas["estado"] == "Atención").sum())
+    st.subheader("Nivel de riesgo de la ventana")
+    st.progress(n_criticas / max(len(evaluadas), 1),
+                text=f"{n_criticas} variables en estado crítico de {len(evaluadas)} evaluadas "
+                     f"({n_atencion} en atención)")
+
+    # --- Alertas y recomendaciones automáticas ---
+    st.subheader("Alertas y recomendaciones")
+    for mensaje in generar_alertas(ventana_sel):
+        if mensaje.startswith(("CRÍTICO", "RECOMENDACIÓN")):
+            st.error(mensaje)
+        elif mensaje.startswith(("ALERTA", "AVISO")):
+            st.warning(mensaje)
+        else:
+            st.success(mensaje)
+
+    # --- Tabla de métricas de drift por variable, con semáforo ---
+    st.subheader("Métricas de drift por variable")
+    sub_app["semáforo"] = sub_app["estado"].map(ICONOS)
+    tabla_mostrar = (sub_app[["semáforo", "variable", "tipo", "n_validos",
+                              "ks_stat", "psi", "js", "cramers_v", "estado"]]
+                     .sort_values(["estado", "variable"])
+                     .round(3))
+    st.dataframe(tabla_mostrar, hide_index=True, use_container_width=True)
+    st.caption("PSI: menos de 0,10 estable, 0,10 a 0,25 atención, más de 0,25 crítico (convención de la industria). "
+               "Los demás umbrales son criterios propios, detallados en el README. "
+               "Una variable con menos de 30 filas válidas en la ventana no se evalúa.")
+
+
+
+        # --- Gráfico 1: distribución histórica vs. ventana actual ---
+    import matplotlib.pyplot as plt
+
+    st.subheader("Distribución histórica vs. actual")
+    variable_sel = st.selectbox("Variable numérica a comparar", variables_num,
+                                index=variables_num.index("capital_prestado"))
+    ref_vals = df_referencia[variable_sel].dropna()
+    act_vals = datos_ventana[variable_sel].dropna()
+
+    if len(act_vals) < MIN_FILAS_VALIDAS:
+        st.info(f"La ventana tiene solo {len(act_vals)} filas válidas de {variable_sel}: "
+                f"muestra insuficiente para comparar distribuciones.")
+    else:
+        # se recorta el eje entre los percentiles 1 y 99 para que los valores extremos no aplasten el gráfico
+        bajo, alto = np.percentile(pd.concat([ref_vals, act_vals]), [1, 99])
+        cortes = np.linspace(bajo, alto, 30) if bajo < alto else 30
+        fig1, ax1 = plt.subplots(figsize=(9, 4))
+        ax1.hist(ref_vals, bins=cortes, density=True, alpha=0.5, label=f"Referencia (n={len(ref_vals)})")
+        ax1.hist(act_vals, bins=cortes, density=True, alpha=0.5, label=f"Actual: {ventana_sel} (n={len(act_vals)})")
+        ax1.set_xlabel(variable_sel)
+        ax1.set_ylabel("Densidad")
+        ax1.legend()
+        st.pyplot(fig1)
+        st.caption("Eje recortado entre los percentiles 1 y 99 para que se vea la forma de la distribución.")
+
+    # --- Gráfico 2: evolución del PSI en el tiempo ---
+    st.subheader("Evolución del drift en el tiempo (PSI)")
+    psi_tiempo = tabla_drift_ventanas[tabla_drift_ventanas["tipo"] == "numerica"].copy()
+    # las ventanas con muestra insuficiente no se grafican
+    psi_tiempo.loc[psi_tiempo["n_validos"] < MIN_FILAS_VALIDAS, "psi"] = np.nan
+
+    vars_sel = st.multiselect("Variables a graficar", variables_num,
+                              default=["capital_prestado", "cuota_pactada", "plazo_meses", "prob_pago"])
+    fig2, ax2 = plt.subplots(figsize=(10, 4))
+    for v in vars_sel:
+        serie = psi_tiempo[psi_tiempo["variable"] == v].set_index("ventana")["psi"].reindex(ventanas)
+        ax2.plot(ventanas, serie.values, marker="o", label=v)
+    ax2.axhline(0.10, color="orange", linestyle="--", label="Umbral atención (0,10)")
+    ax2.axhline(0.25, color="red", linestyle="--", label="Umbral crítico (0,25)")
+    ax2.set_ylabel("PSI")
+    ax2.tick_params(axis="x", rotation=30)
+    ax2.legend(fontsize=8)
+    st.pyplot(fig2)
+    st.caption("Cada punto compara una ventana mensual contra la referencia. "
+               "Los puntos que faltan corresponden a ventanas con menos de 30 filas válidas.")
+    
+    
