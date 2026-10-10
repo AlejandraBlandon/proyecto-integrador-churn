@@ -464,7 +464,7 @@ if EN_STREAMLIT:
                               "ks_stat", "psi", "js", "cramers_v", "estado"]]
                      .sort_values(["estado", "variable"])
                      .round(3))
-    st.dataframe(tabla_mostrar, hide_index=True, use_container_width=True)
+    st.dataframe(tabla_mostrar, hide_index=True, width="stretch")
     st.caption("PSI: menos de 0,10 estable, 0,10 a 0,25 atención, más de 0,25 crítico (convención de la industria). "
                "Los demás umbrales son criterios propios, detallados en el README. "
                "Una variable con menos de 30 filas válidas en la ventana no se evalúa.")
