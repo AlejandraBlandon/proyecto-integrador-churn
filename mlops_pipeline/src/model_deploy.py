@@ -123,3 +123,17 @@ async def predict_csv(archivo: UploadFile = File(...)):
     except (ValueError, KeyError, TypeError, pd.errors.ParserError) as error:
         raise HTTPException(status_code=422, detail=f"No se pudo procesar el CSV: {error}")
     return {"cantidad": len(resultados), "resultados": resultados}
+
+
+
+# %% Prueba con registros reales: 5 que pagaron y 5 que no pagaron
+if __name__ == "__main__":
+    muestra = pd.read_csv(RAIZ / "Base_de_datos.csv")
+    muestra = pd.concat([
+        muestra[muestra["Pago_atiempo"] == 1].head(5),
+        muestra[muestra["Pago_atiempo"] == 0].head(5),
+    ])
+    for r, real in zip(predecir(muestra), muestra["Pago_atiempo"]):
+        print(f"real={real}  prediccion={r['prediccion']}  prob={r['probabilidad_pago']}  "
+              f"sin_puntaje={bool(r['advertencias'])}")
+        
