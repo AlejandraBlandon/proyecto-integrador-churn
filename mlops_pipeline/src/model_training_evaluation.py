@@ -372,3 +372,42 @@ plt.show()
 # disponible al momento de evaluar un crédito nuevo.
 
 # %%
+# Guardar el modelo final (Random Forest) para desplegarlo con la API
+import joblib
+import sklearn
+from pathlib import Path
+from sklearn.base import clone
+
+# Pipeline completo: el mismo preprocesador del Avance 2 + Random Forest
+modelo_final = Pipeline(steps=[
+    ("preprocesador", clone(preprocesador)),   # clone = copia sin entrenar
+    ("modelo", RandomForestClassifier(random_state=42))
+])
+
+# Se entrena con los mismos datos de entrenamiento del Avance 2 (sin transformar:
+# el pipeline ya hace la imputación y la codificación adentro)
+modelo_final.fit(X_train, y_train)
+
+# Verificación: tiene que dar las mismas métricas que el Random Forest del Avance 2
+y_proba_final = modelo_final.predict_proba(X_test)[:, 1]
+print("ROC-AUC en test:", round(roc_auc_score(y_test, y_proba_final), 4))
+print("Accuracy en test:", round(accuracy_score(y_test, modelo_final.predict(X_test)), 4))
+
+# Ruta robusta (funciona por celdas o como script desde cualquier carpeta)
+try:
+    RAIZ = Path(__file__).resolve().parents[2]
+except NameError:
+    RAIZ = Path.cwd().resolve().parents[1]
+
+ruta_modelo = RAIZ / "mlops_pipeline" / "src" / "modelo_rf.joblib"
+
+# Se guarda el pipeline junto con las columnas que espera y la versión de scikit-learn
+joblib.dump({
+    "modelo": modelo_final,
+    "columnas_features": list(X_train.columns),
+    "sklearn_version": sklearn.__version__,
+}, ruta_modelo)
+
+print("Modelo guardado en:", ruta_modelo)
+print("Versión de scikit-learn:", sklearn.__version__)
+# %%
