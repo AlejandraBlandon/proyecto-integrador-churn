@@ -1,0 +1,10 @@
+fg-venv/
+.git/
+.ipynb_checkpoints/
+anaconda_projects/
+__pycache__/
+*.pyc
+*.ipynb
+*.xlsx
+*.csv
+.env
