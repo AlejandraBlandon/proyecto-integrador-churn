@@ -70,8 +70,35 @@ def predecir(df_crudo):
         })
     return resultados
 
-# %% Prueba rápida con 5 registros reales del dataset
-df_prueba = pd.read_csv(RAIZ / "Base_de_datos.csv").head(5)
-for r, real in zip(predecir(df_prueba), df_prueba["Pago_atiempo"]):
-    print(f"real={real}  ->  {r}")
-# %%
+# %% API con FastAPI
+from typing import Any
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI(
+    title="API de predicción de pago a tiempo",
+    description="Recibe uno o varios créditos y devuelve si se predice que el cliente pagará a tiempo.",
+    version="1.0.0",
+)
+
+class LoteRegistros(BaseModel):
+    """Un lote de registros. Cada registro es un diccionario con las columnas del dataset."""
+    registros: list[dict[str, Any]]
+
+@app.get("/health")
+def estado():
+    """Indica que la API está activa y con qué versión de scikit-learn se guardó el modelo."""
+    return {"estado": "ok", "sklearn_version_modelo": paquete["sklearn_version"]}
+
+@app.post("/predict")
+def predict(lote: LoteRegistros):
+    """Predicción por lotes: devuelve una predicción por cada registro, en el mismo orden."""
+    if len(lote.registros) == 0:
+        raise HTTPException(status_code=422, detail="El lote no tiene registros.")
+    try:
+        resultados = predecir(pd.DataFrame(lote.registros))
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(status_code=422, detail=f"No se pudo procesar el lote: {error}")
+    return {"cantidad": len(resultados), "resultados": resultados}
+
+
