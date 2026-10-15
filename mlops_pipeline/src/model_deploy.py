@@ -102,3 +102,24 @@ def predict(lote: LoteRegistros):
     return {"cantidad": len(resultados), "resultados": resultados}
 
 
+
+# %% Entrada por CSV
+import io
+from fastapi import UploadFile, File
+
+@app.post("/predict_csv")
+async def predict_csv(archivo: UploadFile = File(...)):
+    """Predicción por lotes a partir de un archivo CSV (una fila = un crédito)."""
+    if not archivo.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="El archivo debe ser un .csv")
+    contenido = await archivo.read()
+    try:
+        df_csv = pd.read_csv(io.BytesIO(contenido))
+        if len(df_csv) == 0:
+            raise HTTPException(status_code=422, detail="El CSV no tiene filas.")
+        resultados = predecir(df_csv)
+    except HTTPException:
+        raise
+    except (ValueError, KeyError, TypeError, pd.errors.ParserError) as error:
+        raise HTTPException(status_code=422, detail=f"No se pudo procesar el CSV: {error}")
+    return {"cantidad": len(resultados), "resultados": resultados}
