@@ -411,3 +411,36 @@ joblib.dump({
 print("Modelo guardado en:", ruta_modelo)
 print("Versión de scikit-learn:", sklearn.__version__)
 # %%
+
+# %% Curva Precision-Recall de los 3 modelos
+from sklearn.metrics import precision_recall_curve, average_precision_score
+
+plt.figure(figsize=(8, 5))
+for nombre, proba in [("Regresión Logística", y_proba_logistica),
+                      ("Árbol de Decisión", y_proba_arbol),
+                      ("Random Forest", y_proba_rf)]:
+    precision, recall, _ = precision_recall_curve(y_test, proba)
+    ap = average_precision_score(y_test, proba)
+    plt.plot(recall, precision, label=f"{nombre} (AP={ap:.3f})")
+
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Curva Precision-Recall (clase 1: paga a tiempo)")
+plt.legend()
+plt.show()
+# %%
+# %% [markdown]
+# ### Interpretación: curva Precision-Recall
+#
+# La curva Precision-Recall es más informativa que el accuracy cuando las clases están
+# desbalanceadas (95,3 % paga a tiempo, 4,7 % no paga). Muestra qué precisión mantiene
+# cada modelo a medida que aumenta el recall.
+#
+# - Árbol de Decisión y Random Forest tienen AP = 1,000 (sus curvas se superponen).
+# - Regresión Logística tiene AP = 0,999 y es la única que se separa levemente del máximo.
+# - Esta curva está calculada sobre la clase 1 (paga a tiempo), que es la mayoritaria,
+#   por lo que valores cercanos a 1,0 son esperables aun en un modelo mediocre.
+# - Los valores casi perfectos están influenciados por `puntaje`, cuyo valor de relleno
+#   aparece solo en clientes que pagan (ver limitaciones en el README). Sin `puntaje`,
+#   el ROC-AUC baja a 0,63-0,67.
+# %%
